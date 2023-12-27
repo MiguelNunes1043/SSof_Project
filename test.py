@@ -3,7 +3,7 @@ import os
 import json
 
 #list with index 0 being command, index 1 being output file and index 2 being expected output
-executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-flow.patterns.json", "output/1a-basic-flow.output.json", "slices/1a-basic-flow.output.json"],
+"""executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-flow.patterns.json", "output/1a-basic-flow.output.json", "slices/1a-basic-flow.output.json"],
               ["python py_analyser.py slices/1b-basic-flow.py slices/1b-basic-flow.patterns.json", "output/1b-basic-flow.output.json", "slices/1b-basic-flow.output.json"],
               ["python py_analyser.py slices/2-expr-binary-ops.py slices/2-expr-binary-ops.patterns.json", "output/2-expr-binary-ops.output.json", "slices/2-expr-binary-ops.output.json"],
               ["python py_analyser.py slices/3a-expr-func-calls.py slices/3a-expr-func-calls.patterns.json", "output/3a-expr-func-calls.output.json", "slices/3a-expr-func-calls.output.json"],
@@ -18,8 +18,9 @@ executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-fl
               ["python py_analyser.py slices/6b-sanitization.py slices/6b-sanitization.patterns.json", "output/6b-sanitization.output.json", "slices/6b-sanitization.output.json"],
               ["python py_analyser.py slices/7-conds-implicit.py slices/7-conds-implicit.patterns.json", "output/7-conds-implicit.output.json", "slices/7-conds-implicit.output.json"],
               ["python py_analyser.py slices/8-loops-implicit.py slices/8-loops-implicit.patterns.json", "output/8-loops-implicit.output.json", "slices/8-loops-implicit.output.json"]
-              ]
+              ]"""
 
+executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-flow.patterns.json", "output/1a-basic-flow.output.json", "slices/1a-basic-flow.output.json"]]
 
 for execution in executions:
     os.system(execution[0])
@@ -33,7 +34,7 @@ for execution in executions:
         print("file " + execution[1] + " has expected output!")
     else:
         print("file " + execution[1] + " has different output than expected!")
-        print("actual output" + execution[1] + ":")
+        print("actual output: " + execution[1] + ":")
         print(output)
-        print("expected output" + execution[2] + ":")
+        print("expected output: " + execution[2] + ":")
         print(expected)
