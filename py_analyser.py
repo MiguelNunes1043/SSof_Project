@@ -1,6 +1,7 @@
 import sys
 import ast
 import json
+from astexport.export import export_json
 
 # ---------------- AUXILIARY FUNCTIONS ---------------------
 
@@ -47,6 +48,13 @@ vulnerabilitiesFilename = sys.argv[2]
 
 #ast tree of program
 programAST = ast.parse(returnFileAsString(programFilename))
+
+# Convert the AST to JSON using astexport
+json_ast = export_json(programAST)
+parsed_json = json.loads(json_ast)
+pretty_json = json.dumps(parsed_json, indent=4)  # Use indent parameter for indentation
+print(pretty_json)
+
 
 #dictionary containing information about vulnerabilities, example for 1a patterns
 #{'A': {'sources': ['c'], 'sanitizers': ['c'], 'sinks': ['d', 'e'], 'implicit': 'no'}}
