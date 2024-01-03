@@ -159,22 +159,19 @@ def callBeforeName(node, parent):
                 src = checkFoundSourcesField(node.id, "variable")#TODO maybe plus function
                 if src:
                     for s in src:
-                        createVulnerability(v, s["function"], s["lineNo"],
+                        createVulnerability(s["vulnerability"], s["function"], s["lineNo"],
                                         parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
                 
                 if node.id not in instantiatedVariables and node.id !=parent.func.id: #uninstantiated variables count as sources
-                    print(v)
                     createVulnerability(v, node.id, node.lineno,
                                         parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
         
         #check if node.id is different than parent(if parent is call), then add vuln
         
         
-        
-
 def assignBeforeName(node, parent):
     if isinstance(node.ctx, ast.Load): #check if name's context is of type load
-        #create vulnerability with function as variable if vatiarle is a defined source
+        #create vulnerability with function as variable if vatiable is a defined source
         vuln = checkVulnerabilityField(node.id, "sources")
         if vuln:
             for v in vuln:
@@ -184,7 +181,6 @@ def assignBeforeName(node, parent):
         if src:
             for s in src:
                 addSource(s["vulnerability"], s["lineNo"] ,s["function"], parent.targets[0].id) #potentially problematic if multiple assignnments, but no test has this
-
                 vuln = checkVulnerabilityField(parent.targets[0].id , "sinks") #if parent name is a sink
                 if vuln:
                     for v in vuln:
