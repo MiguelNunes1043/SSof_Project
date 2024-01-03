@@ -1,4 +1,4 @@
-from _ast import Constant
+from _ast import BinOp, Constant
 import sys
 import ast
 import json
@@ -11,6 +11,7 @@ vulnerabilities = {}
 foundSources = []
 detectedVulnerabilities = []
 detectedVulnerabilitiesCheck = []
+instantiatedVariables = []
 
 # ---------------- AUXILIARY FUNCTIONS ---------------------
 
@@ -70,8 +71,8 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
     else: vuln["unsanitized_flows"] = "no"
     vuln["sanitized_flows"] = unsanitized_list
 
-    if unsanitized: checkDict = {"source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "yes" ,"sanitized_flows" : unsanitized_list}
-    else: checkDict = {"source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "no" ,"sanitized_flows" : unsanitized_list}
+    if unsanitized: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "yes" ,"sanitized_flows" : unsanitized_list}
+    else: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "no" ,"sanitized_flows" : unsanitized_list}
     
     #checks if vulnerability already exists, if it does does not add
     if checkDict not in detectedVulnerabilitiesCheck:
@@ -120,6 +121,19 @@ class AstTraverser(ast.NodeVisitor):
         parent = getParentIfIsType(node,ast.Assign)
         if parent: #if there's an assignment before the call
             assignBeforeName(node,parent)
+        
+        #previous call in this LoC TODO
+        parent = getParentIfIsType(node,ast.Call)
+        if parent: #if there's an assignment before the call
+            callBeforeName(node,parent)
+        
+        #instantiate variable if type store
+        if isinstance(node.ctx, ast.Store):
+            instantiatedVariables.append(node.id)
+
+    
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
     
     def visit_Call(self, node):
         self.generic_visit(node)
@@ -134,10 +148,33 @@ class AstTraverser(ast.NodeVisitor):
             expressionBeforeCall(node, parent)
 
 # ---------------- AST OPERATION FUNCTIONS ---------------------
+            
+def callBeforeName(node, parent):
+    if isinstance(node.ctx, ast.Load): #check if name's context is of type load
+        #check if any of the existing flows have a sink in the call
+
+        vuln = checkVulnerabilityField(parent.func.id, "sinks")
+        if vuln:
+            for v in vuln:
+                src = checkFoundSourcesField(node.id, "variable")#TODO maybe plus function
+                if src:
+                    for s in src:
+                        createVulnerability(v, s["function"], s["lineNo"],
+                                        parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
+                
+                if node.id not in instantiatedVariables and node.id !=parent.func.id: #uninstantiated variables count as sources
+                    print(v)
+                    createVulnerability(v, node.id, node.lineno,
+                                        parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
+        
+        #check if node.id is different than parent(if parent is call), then add vuln
+        
+        
+        
 
 def assignBeforeName(node, parent):
     if isinstance(node.ctx, ast.Load): #check if name's context is of type load
-        #create vulnerability with function as variable if vatiable is a defined source
+        #create vulnerability with function as variable if vatiarle is a defined source
         vuln = checkVulnerabilityField(node.id, "sources")
         if vuln:
             for v in vuln:
@@ -227,6 +264,8 @@ nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
 
 print(foundSources)
+#print(vulnerabilities)
+print(instantiatedVariables)
 #print(detectedVulnerabilitiesCheck)
 
 #create file for output and print list
