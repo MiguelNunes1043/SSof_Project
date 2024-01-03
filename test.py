@@ -20,7 +20,8 @@ import json
               ["python py_analyser.py slices/8-loops-implicit.py slices/8-loops-implicit.patterns.json", "output/8-loops-implicit.output.json", "slices/8-loops-implicit.output.json"]
               ]"""
 
-executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-flow.patterns.json", "output/1a-basic-flow.output.json", "slices/1a-basic-flow.output.json"]]
+executions = [["python py_analyser.py slices/1a-basic-flow.py slices/1a-basic-flow.patterns.json", "output/1a-basic-flow.output.json", "slices/1a-basic-flow.output.json"],
+              ["python py_analyser.py slices/1b-basic-flow.py slices/1b-basic-flow.patterns.json", "output/1b-basic-flow.output.json", "slices/1b-basic-flow.output.json"]]
 
 for execution in executions:
     os.system(execution[0])

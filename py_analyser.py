@@ -69,11 +69,12 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
 
     detectedVulnerabilities.append(vuln)
 
-def createParents(astTree): #we can see parent node by calling node.parent
-    for node in ast.walk(astTree):
-        for child in ast.iter_child_nodes(node):
-            child.parent = node
-
+def checkVulnerabilityField(vuln, field):
+    """returns vulnerability name if exists, None if else"""
+    for vulnerabilityName, vulnerability in vulnerabilities.items(): # check all vulnerabilities we are searching for
+        if (vuln in vulnerability[field]):
+            return vulnerabilityName
+    return None
 
 # ---------------- AST OPERATION FUNCTIONS ---------------------
 
@@ -85,32 +86,61 @@ class AstTraverser(ast.NodeVisitor):
         ast.NodeVisitor.generic_visit(self, node)
 
     def visit_Assign(self, node):
-        if (isinstance(node.value, ast.Call)): #there's a call to a function
-            for vulnerabilityName, vulnerability in vulnerabilities.items(): # check all vulnerabilities we are searching for
-                if (node.value.func.id in vulnerability["sources"]): # check if call is a source
-                    addSource(vulnerabilityName, node.value.func.lineno ,node.value.func.id, node.targets[0].id)
         self.generic_visit(node)
     
     def visit_Expr(self, node):
-        if (isinstance(node.value, ast.Call)): #check if node's value is a call
-            for vulnerabilityName, vulnerability in vulnerabilities.items(): #iterate through existing vulnerabilities
-                if (node.value.func.id in vulnerability["sinks"]): #check if function is a sink
-                    if (node.value.args != []): #check if arguments exist
-                        for arg in node.value.args: #iterate through arguments
-                            for i in range(0,len(foundSources)): #iterate through existing flows
-                                if (arg.id in foundSources[i]["variable"]): #check if argument(s) tainted
-                                    #found tainted argument in sink
-                                    createVulnerability(foundSources[i]["vulnerability"], foundSources[i]["function"], foundSources[i]["lineNo"],
-                                                        node.value.func.id, node.value.func.lineno, True, []) #TODO hard coded sanitisation
-                                    #TODO unsanitized flows
         self.generic_visit(node)
     
     def visit_Name(self, node):
         self.generic_visit(node)
+        #handle case where there's an assignemt of a tainted variable
+        #check if assignment beforehand
+        #check if name is tainted
     
     def visit_Call(self, node):
         self.generic_visit(node)
-    
+        #previous assignment in this LoC
+        parent = getParentIfIsType(node,ast.Assign)
+        if parent: #if there's an assignment before the call
+            assignBeforeCall(node, parent)
+
+        #previous Expression in this LoC
+        parent = getParentIfIsType(node,ast.Expr)
+        self.generic_visit(node)
+        if parent: #if there's an expression before the call
+            expressionBeforeCall(node, parent)
+            
+
+def expressionBeforeCall(node, parent):
+    """handles the case where there's an expression before a call"""
+    vuln = checkVulnerabilityField(node.func.id, "sinks")
+    if vuln: #if current call is a vulnerability
+        for arg in node.args: #iterate through function arguments
+            for i in range(0,len(foundSources)): #iterate through existing security violating flows
+                if (arg.id in foundSources[i]["variable"]): #if there's a tainted argument in the sink
+                    createVulnerability(foundSources[i]["vulnerability"], foundSources[i]["function"], foundSources[i]["lineNo"],
+                                        node.func.id, node.func.lineno, True, []) #TODO hard coded sanitisation
+
+def assignBeforeCall(node, parent):
+    """handles the case where there's an assign before a call"""
+    vuln = checkVulnerabilityField(node.func.id, "sources")
+    if vuln: #if current call is a vulnerability
+        for target in parent.targets:
+            addSource(vuln, node.func.lineno ,node.func.id, target.id)
+
+def getParentIfIsType(node, type):
+    """returns parent any parent is of type type, None if else"""
+    currentNode = node
+    if currentNode.parent:
+        if isinstance(currentNode.parent,type):
+            return currentNode.parent
+        currentNode = currentNode.parent
+    return None
+
+def createParents(astTree): #we can see parent node by calling node.parent
+    for node in ast.walk(astTree):
+        for child in ast.iter_child_nodes(node):
+            child.parent = node
 
 # ---------------- PROGRAM EXECUTION START ---------------------
 
@@ -122,7 +152,7 @@ vulnerabilitiesFilename = sys.argv[2]
 #ast tree of program
 programAST = ast.parse(returnFileAsString(programFilename))
 
-printAST(programAST)
+#printAST(programAST)
 
 #dictionary containing information about vulnerabilities, example for 1a patterns
 #{'A': {'sources': ['c'], 'sanitizers': ['c'], 'sinks': ['d', 'e'], 'implicit': 'no'}}
@@ -141,6 +171,8 @@ createParents(programAST)
 
 nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
+
+print(foundSources)
 
 #create file for output and print list
 #works only if files are in slices directory or in another directory, maybe change later
