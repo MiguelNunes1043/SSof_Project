@@ -10,6 +10,7 @@ from astexport.export import export_json
 vulnerabilities = {}
 foundSources = []
 detectedVulnerabilities = []
+detectedVulnerabilitiesCheck = []
 
 # ---------------- AUXILIARY FUNCTIONS ---------------------
 
@@ -55,19 +56,27 @@ def printAST(ast):
     print(pretty_json)
 
 def addSource(vulnName, srclineno, srcfunccall, varid):
-    foundSources.append({"vulnerability" : vulnName, "lineNo" : srclineno, "function" : srcfunccall, "variable" : varid})
+    d = {"vulnerability" : vulnName, "lineNo" : srclineno, "function" : srcfunccall, "variable" : varid}
+    if d not in foundSources:
+        foundSources.append(d)
 
 def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsanitized, unsanitized_list):
     vuln = {}
-    vuln["vulnerability"] = vulnname + "_" + str(vulnerabilities[vulnname]["counter"])
-    vulnerabilities[vulnname]["counter"] += 1
     vuln["source"] = [srcname, srclineno]
     vuln["sink"] = [sinkname, sinklineno]
     if unsanitized: vuln["unsanitized_flows"] = "yes"
     else: vuln["unsanitized_flows"] = "no"
     vuln["sanitized_flows"] = unsanitized_list
 
-    detectedVulnerabilities.append(vuln)
+    if unsanitized: checkDict = {"source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "yes" ,"sanitized_flows" : unsanitized_list}
+    else: checkDict = {"source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "no" ,"sanitized_flows" : unsanitized_list}
+    
+    #checks if vulnerability already exists, if it does does not add
+    if checkDict not in detectedVulnerabilitiesCheck:
+        detectedVulnerabilitiesCheck.append(checkDict)
+        vuln["vulnerability"] = vulnname + "_" + str(vulnerabilities[vulnname]["counter"])
+        vulnerabilities[vulnname]["counter"] += 1
+        detectedVulnerabilities.append(vuln)
 
 def checkVulnerabilityField(vuln, field):
     """returns vulnerability names if exists, None if else"""
@@ -86,13 +95,14 @@ def checkFoundSourcesField(vuln, field):
     if res == []: return None
     return res
 
-# ---------------- AST OPERATION FUNCTIONS ---------------------
+# ---------------- NODEVISITOR OVERRIDE CLASS ---------------------
 
 class AstTraverser(ast.NodeVisitor):
     def __init__(self):
         self.count = 0
     
     def generic_visit(self, node):
+        #print(type(node).__name__)
         ast.NodeVisitor.generic_visit(self, node)
 
     def visit_Assign(self, node):
@@ -103,10 +113,6 @@ class AstTraverser(ast.NodeVisitor):
     
     def visit_Name(self, node):
         self.generic_visit(node)
-        #handle case where there's an assignemt of a tainted variable
-        #check if assignment beforehand
-        #check if name is tainted
-        #if context is type load
         #previous assignment in this LoC
         parent = getParentIfIsType(node,ast.Assign)
         if parent: #if there's an assignment before the call
@@ -123,7 +129,9 @@ class AstTraverser(ast.NodeVisitor):
         parent = getParentIfIsType(node,ast.Expr)
         if parent: #if there's an expression before the call
             expressionBeforeCall(node, parent)
-            
+
+# ---------------- AST OPERATION FUNCTIONS ---------------------
+
 def assignBeforeName(node, parent):
     if isinstance(node.ctx, ast.Load): #check if name's context is of type load
         #create vulnerability with function as variable if vatiable is a defined source
@@ -131,7 +139,6 @@ def assignBeforeName(node, parent):
         if vuln:
             for v in vuln:
                 addSource(v, node.lineno ,node.id, node.id) #potentially problematic if multiple assignnments, but no test has this
-
         #check if is vulnerable argument
         src = checkFoundSourcesField(node.id, "variable")
         if src:
@@ -144,7 +151,6 @@ def assignBeforeName(node, parent):
                         createVulnerability(v, s["function"], s["lineNo"],
                                         parent.targets[0].id, parent.targets[0].lineno, True, []) #TODO hard coded sanitisation
 
-        
     #might want to check if type store is overwritten by anything not tainted, if so should we remove flow?
 
 def expressionBeforeCall(node, parent):
@@ -164,14 +170,21 @@ def assignBeforeCall(node, parent):
         for v in vuln:
             for target in parent.targets:
                 addSource(v, node.func.lineno ,node.func.id, target.id)
-
+                vuln = checkVulnerabilityField(target.id, "sinks")
+                if vuln: #if the parent is a sink
+                    for v in vuln:
+                        createVulnerability(v, node.func.id, node.func.lineno,
+                                        target.id, target.lineno, True, []) #TODO hard coded sanitisation
+    
+    
 def getParentIfIsType(node, type):
     """returns parent any parent is of type type, None if else"""
     currentNode = node
-    if currentNode.parent:
+    while hasattr(currentNode,"parent"):
         if isinstance(currentNode.parent,type):
             return currentNode.parent
-        currentNode = currentNode.parent
+        newNode = currentNode.parent
+        currentNode = newNode
     return None
 
 def createParents(astTree): #we can see parent node by calling node.parent
@@ -209,7 +222,8 @@ createParents(programAST)
 nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
 
-print(foundSources)
+#print(foundSources)
+#print(detectedVulnerabilitiesCheck)
 
 #create file for output and print list
 #works only if files are in slices directory or in another directory, maybe change later
