@@ -70,11 +70,21 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
     detectedVulnerabilities.append(vuln)
 
 def checkVulnerabilityField(vuln, field):
-    """returns vulnerability name if exists, None if else"""
+    """returns vulnerability names if exists, None if else"""
+    res = []
     for vulnerabilityName, vulnerability in vulnerabilities.items(): # check all vulnerabilities we are searching for
         if (vuln in vulnerability[field]):
-            return vulnerabilityName
-    return None
+            res.append(vulnerabilityName)
+    if res == []: return None
+    return res
+
+def checkFoundSourcesField(vuln, field):
+    res = []
+    for src in foundSources:
+        if vuln == src[field]:
+            res.append(src)
+    if res == []: return None
+    return res
 
 # ---------------- AST OPERATION FUNCTIONS ---------------------
 
@@ -96,6 +106,11 @@ class AstTraverser(ast.NodeVisitor):
         #handle case where there's an assignemt of a tainted variable
         #check if assignment beforehand
         #check if name is tainted
+        #if context is type load
+        #previous assignment in this LoC
+        parent = getParentIfIsType(node,ast.Assign)
+        if parent: #if there's an assignment before the call
+            assignBeforeName(node,parent)
     
     def visit_Call(self, node):
         self.generic_visit(node)
@@ -106,10 +121,31 @@ class AstTraverser(ast.NodeVisitor):
 
         #previous Expression in this LoC
         parent = getParentIfIsType(node,ast.Expr)
-        self.generic_visit(node)
         if parent: #if there's an expression before the call
             expressionBeforeCall(node, parent)
             
+def assignBeforeName(node, parent):
+    if isinstance(node.ctx, ast.Load): #check if name's context is of type load
+        #create vulnerability with function as variable if vatiable is a defined source
+        vuln = checkVulnerabilityField(node.id, "sources")
+        if vuln:
+            for v in vuln:
+                addSource(v, node.lineno ,node.id, node.id) #potentially problematic if multiple assignnments, but no test has this
+
+        #check if is vulnerable argument
+        src = checkFoundSourcesField(node.id, "variable")
+        if src:
+            for s in src:
+                addSource(s["vulnerability"], s["lineNo"] ,s["function"], parent.targets[0].id) #potentially problematic if multiple assignnments, but no test has this
+
+                vuln = checkVulnerabilityField(parent.targets[0].id , "sinks") #if parent name is a sink
+                if vuln:
+                    for v in vuln:
+                        createVulnerability(v, s["function"], s["lineNo"],
+                                        parent.targets[0].id, parent.targets[0].lineno, True, []) #TODO hard coded sanitisation
+
+        
+    #might want to check if type store is overwritten by anything not tainted, if so should we remove flow?
 
 def expressionBeforeCall(node, parent):
     """handles the case where there's an expression before a call"""
@@ -125,8 +161,9 @@ def assignBeforeCall(node, parent):
     """handles the case where there's an assign before a call"""
     vuln = checkVulnerabilityField(node.func.id, "sources")
     if vuln: #if current call is a vulnerability
-        for target in parent.targets:
-            addSource(vuln, node.func.lineno ,node.func.id, target.id)
+        for v in vuln:
+            for target in parent.targets:
+                addSource(v, node.func.lineno ,node.func.id, target.id)
 
 def getParentIfIsType(node, type):
     """returns parent any parent is of type type, None if else"""
