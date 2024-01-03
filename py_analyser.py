@@ -56,11 +56,13 @@ def printAST(ast):
     print(pretty_json)
 
 def addSource(vulnName, srclineno, srcfunccall, varid):
+    """adds a source to the existing list of sources foundSources"""
     d = {"vulnerability" : vulnName, "lineNo" : srclineno, "function" : srcfunccall, "variable" : varid}
     if d not in foundSources:
         foundSources.append(d)
 
 def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsanitized, unsanitized_list):
+    """creates a vulnerability and appends it to the list to be printed as an output"""
     vuln = {}
     vuln["source"] = [srcname, srclineno]
     vuln["sink"] = [sinkname, sinklineno]
@@ -88,6 +90,7 @@ def checkVulnerabilityField(vuln, field):
     return res
 
 def checkFoundSourcesField(vuln, field):
+    """returns existing sources/flows if they exist, None if else"""
     res = []
     for src in foundSources:
         if vuln == src[field]:
@@ -188,6 +191,7 @@ def getParentIfIsType(node, type):
     return None
 
 def createParents(astTree): #we can see parent node by calling node.parent
+    """creates a parent object for each node in the tree, useful for traversing the tree from a different node"""
     for node in ast.walk(astTree):
         for child in ast.iter_child_nodes(node):
             child.parent = node
@@ -222,7 +226,7 @@ createParents(programAST)
 nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
 
-#print(foundSources)
+print(foundSources)
 #print(detectedVulnerabilitiesCheck)
 
 #create file for output and print list
