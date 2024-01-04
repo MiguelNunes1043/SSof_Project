@@ -35,7 +35,7 @@ def createVulnerabilityDictionary(filename):
         vulnerabilityName = i["vulnerability"]
         vuln[vulnerabilityName] = {}
         vuln[vulnerabilityName]["sources"] = i["sources"]
-        vuln[vulnerabilityName]["sanitizers"] = i["sources"]
+        vuln[vulnerabilityName]["sanitizers"] = i["sanitizers"]
         vuln[vulnerabilityName]["sinks"] = i["sinks"]
         vuln[vulnerabilityName]["implicit"] = i["implicit"]
         vuln[vulnerabilityName]["counter"] = 1
@@ -71,8 +71,8 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
     else: vuln["unsanitized_flows"] = "no"
     vuln["sanitized_flows"] = unsanitized_list
 
-    if unsanitized: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "yes" ,"sanitized_flows" : unsanitized_list}
-    else: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "no" ,"sanitized_flows" : unsanitized_list}
+    if unsanitized: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "yes"}
+    else: checkDict = {"vulnerability" : vulnname, "source" : [srcname, srclineno], "sink" : [sinkname, sinklineno], "unsanitized_flows": "no" }
     
     #checks if vulnerability already exists, if it does does not add
     if checkDict not in detectedVulnerabilitiesCheck:
@@ -80,6 +80,13 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
         vuln["vulnerability"] = vulnname + "_" + str(vulnerabilities[vulnname]["counter"])
         vulnerabilities[vulnname]["counter"] += 1
         detectedVulnerabilities.append(vuln)
+    else:
+        #update sanitization if needed
+        for v in detectedVulnerabilities:
+            for i in range(0, vulnerabilities[vulnname]["counter"] - 1):
+                if v["vulnerability"] == vulnname + "_" + str(i) and unsanitized_list != v["sanitized_flows"]:
+                    v["sanitized_flows"] = unsanitized_list
+
 
 def checkVulnerabilityField(vuln, field):
     """returns vulnerability names if exists, None if else"""
@@ -99,6 +106,18 @@ def checkFoundSourcesField(vuln, field):
     if res == []: return None
     return res
 
+def addSanitizer(source ,sanitizer, lineno):
+    if hasattr(source, "sanitizers"):
+        source["sanitizers"].append([sanitizer, lineno])
+    else:
+        source["sanitizers"] = [sanitizer, lineno]
+
+def getSanitizers(source):
+    if "sanitizers" in source:
+        return source["sanitizers"]
+    else:
+        return []
+
 # ---------------- NODEVISITOR OVERRIDE CLASS ---------------------
 
 class AstTraverser(ast.NodeVisitor):
@@ -117,6 +136,11 @@ class AstTraverser(ast.NodeVisitor):
     
     def visit_Name(self, node):
         self.generic_visit(node)
+
+        #instantiate variable if type store
+        if isinstance(node.ctx, ast.Store):
+            instantiatedVariables.append(node.id)
+
         #previous assignment in this LoC
         parent = getParentIfIsType(node,ast.Assign)
         if parent: #if there's an assignment before the call
@@ -126,10 +150,6 @@ class AstTraverser(ast.NodeVisitor):
         parent = getParentIfIsType(node,ast.Call)
         if parent: #if there's an assignment before the call
             callBeforeName(node,parent)
-        
-        #instantiate variable if type store
-        if isinstance(node.ctx, ast.Store):
-            instantiatedVariables.append(node.id)
 
     
     def visit_BinOp(self, node):
@@ -151,7 +171,21 @@ class AstTraverser(ast.NodeVisitor):
             
 def callBeforeName(node, parent):
     if isinstance(node.ctx, ast.Load): #check if name's context is of type load
-        #check if any of the existing flows have a sink in the call
+
+        
+        #sanitization definition
+        
+        #if sanitizer is the current call, then flow is sanitized
+        for vulnerabilityName, vulnerability in vulnerabilities.items():
+            for sanitizers in vulnerability["sanitizers"]:
+                for sanitizer in sanitizers: #all possible sanitizers
+                    
+                    for vulnsrc in vulnerability["sources"]:
+
+                        for src in foundSources:
+                            if src["function"] == vulnsrc and sanitizer == node.id:
+                                addSanitizer(src, sanitizer, node.lineno)
+                            
 
         vuln = checkVulnerabilityField(parent.func.id, "sinks")
         if vuln:
@@ -160,9 +194,10 @@ def callBeforeName(node, parent):
                 if src:
                     for s in src:
                         createVulnerability(s["vulnerability"], s["function"], s["lineNo"],
-                                        parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
+                                        parent.func.id, parent.func.lineno, True, getSanitizers(s)) #TODO hard coded sanitisation
                 
-                if node.id not in instantiatedVariables and node.id !=parent.func.id: #uninstantiated variables count as sources
+                if node.id not in instantiatedVariables and node.id != parent.func.id: #uninstantiated variables count as sources
+                    #print(node.id + str(node.lineno))
                     createVulnerability(v, node.id, node.lineno,
                                         parent.func.id, parent.func.lineno, True, []) #TODO hard coded sanitisation
         
@@ -185,7 +220,7 @@ def assignBeforeName(node, parent):
                 if vuln:
                     for v in vuln:
                         createVulnerability(v, s["function"], s["lineNo"],
-                                        parent.targets[0].id, parent.targets[0].lineno, True, []) #TODO hard coded sanitisation
+                                        parent.targets[0].id, parent.targets[0].lineno, True, getSanitizers(s)) #TODO hard coded sanitisation
 
     #might want to check if type store is overwritten by anything not tainted, if so should we remove flow?
 
@@ -197,7 +232,7 @@ def expressionBeforeCall(node, parent):
             for i in range(0,len(foundSources)): #iterate through existing security violating flows
                 if (arg.id in foundSources[i]["variable"]): #if there's a tainted argument in the sink
                     createVulnerability(foundSources[i]["vulnerability"], foundSources[i]["function"], foundSources[i]["lineNo"],
-                                        node.func.id, node.func.lineno, True, []) #TODO hard coded sanitisation
+                                        node.func.id, node.func.lineno, True, getSanitizers(foundSources[i])) #TODO hard coded sanitisation
 
 def assignBeforeCall(node, parent):
     """handles the case where there's an assign before a call"""
@@ -209,6 +244,7 @@ def assignBeforeCall(node, parent):
                 vuln = checkVulnerabilityField(target.id, "sinks")
                 if vuln: #if the parent is a sink
                     for v in vuln:
+                        #print(node.func.id + str(node.func.lineno) + v + target.id + str(target.lineno))
                         createVulnerability(v, node.func.id, node.func.lineno,
                                         target.id, target.lineno, True, []) #TODO hard coded sanitisation
     
@@ -259,9 +295,9 @@ createParents(programAST)
 nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
 
-print(foundSources)
+#print(foundSources)
 #print(vulnerabilities)
-print(instantiatedVariables)
+#print(instantiatedVariables)
 #print(detectedVulnerabilitiesCheck)
 
 #create file for output and print list
