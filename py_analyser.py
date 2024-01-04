@@ -46,7 +46,7 @@ def listToFile(filenameWithPy, list):
     filenameWithoutPy = filenameWithPy.split("/")[1]
     filename = filenameWithoutPy.split(".")[0] + ".output.json"
     f = open("output/" + filename, "w+")
-    f.write(json.dumps(list))
+    f.write(json.dumps(list, indent=4))
     f.close()
 
 def printAST(ast):
@@ -79,6 +79,8 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
         detectedVulnerabilitiesCheck.append(checkDict)
         vuln["vulnerability"] = vulnname + "_" + str(vulnerabilities[vulnname]["counter"])
         vulnerabilities[vulnname]["counter"] += 1
+        # Reorder the dictionary with "vulnerability" as the first key
+        vuln = dict([("vulnerability", vulnname)] + list(vuln.items()))
         detectedVulnerabilities.append(vuln)
     else:
         #update sanitization if needed
@@ -86,6 +88,8 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
             for i in range(0, vulnerabilities[vulnname]["counter"] - 1):
                 if v["vulnerability"] == vulnname + "_" + str(i) and unsanitized_list != v["sanitized_flows"]:
                     v["sanitized_flows"] = unsanitized_list
+
+
 
 
 def checkVulnerabilityField(vuln, field):
@@ -110,11 +114,11 @@ def addSanitizer(source ,sanitizer, lineno):
     if hasattr(source, "sanitizers"):
         source["sanitizers"].append([sanitizer, lineno])
     else:
-        source["sanitizers"] = [sanitizer, lineno]
+        source["sanitizers"] = [[sanitizer, lineno]]
 
 def getSanitizers(source):
     if "sanitizers" in source:
-        return source["sanitizers"]
+        return [[sanitizer] for sanitizer in source["sanitizers"]]
     else:
         return []
 
@@ -288,9 +292,6 @@ detectedVulnerabilities = []
 
 #create parent for every node
 createParents(programAST)
-
-#find vulnerabilites and add them to list
-#TODO our project will be this
 
 nodevisitor = AstTraverser()
 nodevisitor.visit(programAST)
