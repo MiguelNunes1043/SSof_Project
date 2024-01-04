@@ -86,11 +86,10 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
         #update sanitization if needed
         for v in detectedVulnerabilities:
             for i in range(0, vulnerabilities[vulnname]["counter"] - 1):
-                if v["vulnerability"] == vulnname + "_" + str(i) and unsanitized_list != v["sanitized_flows"]:
+                if v["vulnerability"] == vulnname + "_" + str(i) and [unsanitized_list] != v["sanitized_flows"]:
                     for unsanitized in unsanitized_list:
-                        print(unsanitized)
                         if unsanitized[1] <= v["sink"][1]:
-                            v["sanitized_flows"].append(unsanitized)
+                            v["sanitized_flows"].append([unsanitized])
 
 
 
