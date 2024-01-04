@@ -88,6 +88,7 @@ def createVulnerability(vulnname, srcname, srclineno, sinkname, sinklineno, unsa
             for i in range(0, vulnerabilities[vulnname]["counter"] - 1):
                 if v["vulnerability"] == vulnname + "_" + str(i) and unsanitized_list != v["sanitized_flows"]:
                     for unsanitized in unsanitized_list:
+                        print(unsanitized)
                         if unsanitized[1] <= v["sink"][1]:
                             v["sanitized_flows"].append(unsanitized)
 
@@ -120,7 +121,7 @@ def addSanitizer(source ,sanitizer, lineno):
 
 def getSanitizers(source):
     if "sanitizers" in source:
-        return [[sanitizer] for sanitizer in source["sanitizers"]]
+        return source["sanitizers"]
     else:
         return []
 
